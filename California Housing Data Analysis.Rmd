@@ -1,0 +1,163 @@
+---
+title: "California Housing Data Analysis"
+Author: Nandini Ethirajulu
+date: "2024-06-15"
+output:
+  word_document: default
+  html_document: default
+---
+
+
+```{r}
+
+#Considering California Housing Data from KAGGLE (https://www.kaggle.com/camnugent/california housing-prices) as source
+
+
+
+#Reading the data and tranfering it to a binary incidence matrix
+
+#install.packages("arules")
+library("arules")
+
+##Setting the directory for the source data
+setwd("C:/Users/nandi/Documents/Personal/Academics/Projects/California Housing Data Analysis/California Housing Data/archive") 
+housing_dats <- read.csv("housing.csv",header = TRUE)
+
+colnames(housing_dats)
+
+dim(housing_dats)
+##20640 rows and   10 attributes
+
+##preprocessing steps
+
+##identifying na values
+sum(is.na(housing_dats))
+
+##NA values derived from total_bedrooms variable in this dataset
+total_bedrooms_check = housing_dats$total_bedrooms
+sum(is.na(total_bedrooms_check))
+
+##identifying the mean value to use and fill in the missing datapoints
+bedroom_median = median(housing_dats$total_bedrooms, na.rm=TRUE)
+housing_dats$total_bedrooms[is.na(housing_dats$total_bedrooms)] = bedroom_median
+
+#Transforming data into binary dataset
+
+#creating a new dataframe (binary_housing_data) for storing additional  binary data columns
+binary_housing_data <- housing_dats
+head(housing_dats)
+
+###head(housing_dats)
+
+# Obtaining threshold values for numerical variables in this dataset
+median_threshold <- median(binary_housing_data$housing_median_age)
+rooms_threshold <- median(binary_housing_data$total_rooms)
+bedrooms_threshold <- median(binary_housing_data$total_bedrooms)
+population_threshold <- median(binary_housing_data$population)
+income_threshold <- median(binary_housing_data$median_income)
+value_threshold <- median(binary_housing_data$median_house_value)
+households_threshold <- median(housing_dats$households)  
+
+##identifying max values and using it for binning
+max((binary_housing_data$total_bedrooms))
+max((binary_housing_data$total_rooms))
+max((binary_housing_data$population))
+max((binary_housing_data$median_house_value))
+max((binary_housing_data$total_bedrooms))
+
+##Binning the variables into categories
+binary_housing_data[["housing_median_age"]] <- ordered(cut(binary_housing_data[["housing_median_age"]], c(0, 15, 30, 50, 70)), labels = c("new", "average", "older", "oldest"))
+
+
+binary_housing_data[["total_rooms"]] <- ordered(cut(binary_housing_data[["total_rooms"]], c(0, 5000, 10000, 27000, 50000)), labels = c("less", "average", "high", "max"))
+
+
+
+
+binary_housing_data[["total_bedrooms"]] <- ordered(
+  cut(binary_housing_data[["total_bedrooms"]], c(0, 3000, 5000, 10000)),
+  labels = c("less", "average", "high")
+)
+
+
+binary_housing_data[["population"]] <- ordered(cut(binary_housing_data[["population"]], c(0, 5000, 10000, 27000, 50000)), labels = c("less", "average", "high", "max"))
+
+
+
+binary_housing_data[["median_income"]] <- ordered(cut(binary_housing_data[["median_income"]], c(0, 5, 8, 12, 20)), labels = c("0-5", "5-8", "8-12", "12-20"))
+
+
+binary_housing_data[["median_house_value"]] <- ordered(cut(binary_housing_data[["median_house_value"]], c(0, 50000, 200000, 400000, Inf)), labels = c("less", "average", "high", "max"))
+
+
+binary_housing_data[["households"]] <- ordered(cut(binary_housing_data[["households"]], c(0, 2000, 3000, 6000, 10000)), labels = c("1-2", "2-3", "3-4", "4-5"))
+
+##Converting all variables into factors
+binary_housing_data$housing_median_age <- as.factor(binary_housing_data$housing_median_age)
+  
+binary_housing_data$total_rooms   <- as.factor(binary_housing_data$total_rooms)
+binary_housing_data$total_bedrooms   <- as.factor(binary_housing_data$total_bedrooms)
+
+binary_housing_data$population  <- as.factor(binary_housing_data$population)
+binary_housing_data$median_income  <- as.factor(binary_housing_data$median_income)
+binary_housing_data$median_house_value  <- as.factor(binary_housing_data$median_house_value)
+binary_housing_data$households  <- as.factor(binary_housing_data$households)
+binary_housing_data$ocean_proximity  <- as.factor(binary_housing_data$ocean_proximity)
+
+binary_housing_data <- binary_housing_data[, -which(names(binary_housing_data) %in% c("longitude","latitude"))]
+head(binary_housing_data)
+
+
+##Developing Binary incidence matrix
+binary_incidence_matrix <- as(binary_housing_data, "transactions")
+
+
+#Visualizing binary incidence matrix
+itemFrequencyPlot(binary_incidence_matrix, support = 0.05, cex.names = 0.8)
+
+
+```
+
+```{r}
+#b. top three high lift rules
+rule_params <- list(support = .005, confidence = .01, minlen = 2, maxlen = 6)
+housing_arules <- apriori(binary_incidence_matrix, parameter = rule_params)
+
+
+
+print("top three high lift rules of housing dataset are: ")
+inspect(sort(housing_arules, by = "lift")[1:3,])
+
+ 
+```
+
+
+```{r}
+#c. top 4 rules according to confidence
+print("top 4 rules according to confidence of housing dataset are: ")
+inspect(sort(housing_arules, by = "confidence")[1:4,])
+
+```
+```{r}
+#d. Recommendations for Purchasing an Average Priced Home Near the Ocean 
+
+##Analysis based on the association rules:
+
+housing_near_ocean = subset(housing_arules, rhs %in% "ocean_proximity=NEAR OCEAN")
+
+inspect(sort(housing_near_ocean, by = "lift")[1:5,])
+
+
+## the housing the person is looking for should be having average median age (15-30), fewer bedrooms and the surrounding neighborhood are expected to be less in population, with an average households of 1 to 2. And the median house values are expected to be around more than 400000
+
+```
+
+
+```{r}
+#e.  Characteristics Associated with Low Population Areas
+
+housing_less_population = subset(housing_arules, rhs %in% "population=less")
+inspect(sort(housing_less_population, by = "lift")[1:5,])
+
+###Low population areas associate with median house values more than 400000, few bedrooms, very low households of 1-2, ver minimum total rooms and median income of between 12-20
+```
